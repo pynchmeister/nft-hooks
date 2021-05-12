@@ -7,8 +7,8 @@ import {
   THEGRAPH_UNISWAP_URL_BY_NETWORK,
 } from '../constants/urls';
 import type { NetworkIDs } from '../constants/networks';
-import { GET_MEDIA_QUERY } from '../graph-queries/zora';
-import type { GetMediaAndAuctionsQuery } from '../graph-queries/zora-types';
+import { GET_AUCTION_HOUSE_QUERY, GET_MEDIA_QUERY } from '../graph-queries/zora';
+import type { GetMediaAndAuctionsQuery, GetReserveAuctionQuery } from '../graph-queries/zora-types';
 import { GET_TOKEN_VALUES_QUERY } from '../graph-queries/uniswap';
 import type { GetTokenPricesQuery } from '../graph-queries/uniswap-types';
 import { TimeoutsLookupType, DEFAULT_NETWORK_TIMEOUTS_MS } from '../constants/timeouts';
@@ -18,11 +18,13 @@ import {
   MediaContentType,
   MetadataResultType,
   NFTMediaDataType,
+  AuctionsResult,
 } from './FetchResultTypes';
 import {
   transformCurrencyForKey,
   transformMediaForKey,
   addAuctionInformation,
+  transformAuctionsForKey,
 } from './TransformFetchResults';
 import { FetchWithTimeout } from './FetchWithTimeout';
 import { CurrencyLookupType } from './AuctionInfoTypes';
@@ -50,6 +52,8 @@ export class MediaFetchAgent {
     currencyLoader: DataLoader<string, ChainCurrencyType>;
     // fetches NFT ipfs metadata from url, not batched but cached
     metadataLoader: DataLoader<string, any>;
+    // fetches NFT ipfs metadata from url, not batched but cached
+    auctionLoader: DataLoader<string, AuctionsResult>;
   };
 
   constructor(network: NetworkIDs) {
@@ -59,6 +63,7 @@ export class MediaFetchAgent {
     this.graphEndpoint = THEGRAPH_API_URL_BY_NETWORK[network];
     this.loaders = {
       mediaLoader: new DataLoader((keys) => this.fetchMediaGraph(keys)),
+      auctionLoader: new DataLoader((keys) => this.fetchReserveAuctions(keys)),
       currencyLoader: new DataLoader((keys) => this.fetchCurrenciesGraph(keys)),
       metadataLoader: new DataLoader(
         async (keys) => {
@@ -163,25 +168,48 @@ export class MediaFetchAgent {
     return addAuctionInformation(chainInfo, currencyInfos);
   }
 
+  async loadAuctionByCurator(curatorId: string) {
+    return this.loaders.auctionLoader.load(curatorId.toLowerCase());
+  }
+
   /**
-   * Internal fetch function to retrieve Graph data for Zora NFT IDs
+   * Internal fetch function to retrieve Graph data for matching curated auctions
+   *
+   * @function fetchReserveAuctions
+   * @private
+   * @param curatorIds list of Zora NFT IDs to fetch from the graph datastore
+   * @returns mapped transformed list of curated auction results
+   */
+  private async fetchReserveAuctions(curatorIds: readonly string[]) {
+    const fetchWithTimeout = new FetchWithTimeout(this.timeouts.Graph);
+    const client = new GraphQLClient(this.graphEndpoint, {
+      fetch: fetchWithTimeout.fetch,
+    });
+    const response = (await client.request(GET_AUCTION_HOUSE_QUERY, {
+      curatorids: curatorIds,
+    })) as GetReserveAuctionQuery;
+    return curatorIds.map((key) => transformAuctionsForKey(response.reserveAuctions, key));
+  }
+
+  /**
+   * Internal fetch current auctions by curator
    *
    * @function fetchMediaGraph
    * @private
    * @param mediaIds list of Zora NFT IDs to fetch from the graph datastore
    * @returns mapped transformed list of zora NFT ID data
    */
-  private async fetchMediaGraph(mediaIds: readonly string[]) {
-    const fetchWithTimeout = new FetchWithTimeout(this.timeouts.Graph);
-    const client = new GraphQLClient(this.graphEndpoint, {
-      fetch: fetchWithTimeout.fetch,
-    });
-    const response = (await client.request(GET_MEDIA_QUERY, {
-      ids_id: mediaIds,
-      ids_bigint: mediaIds,
-    })) as GetMediaAndAuctionsQuery;
-    return mediaIds.map((key) => transformMediaForKey(response, key));
-  }
+     private async fetchMediaGraph(mediaIds: readonly string[]) {
+      const fetchWithTimeout = new FetchWithTimeout(this.timeouts.Graph);
+      const client = new GraphQLClient(this.graphEndpoint, {
+        fetch: fetchWithTimeout.fetch,
+      });
+      const response = (await client.request(GET_MEDIA_QUERY, {
+        ids_id: mediaIds,
+        ids_bigint: mediaIds,
+      })) as GetMediaAndAuctionsQuery;
+      return mediaIds.map((key) => transformMediaForKey(response, key));
+    }
 
   /**
    * Internal fetch function to retrieve currency information from TheGraph

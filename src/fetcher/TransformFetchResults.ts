@@ -10,7 +10,7 @@ import type {
   PreviousReserveBidFragment,
 } from '../graph-queries/zora-types';
 import type { GetTokenPricesQuery } from '../graph-queries/uniswap-types';
-import { ChainCurrencyType, NFTDataType, NFTMediaDataType } from './FetchResultTypes';
+import { AuctionsResult, ChainCurrencyType, NFTDataType, NFTMediaDataType } from './FetchResultTypes';
 import { RequestError } from './RequestError';
 import { CurrencyLookupType, PastReserveBid } from './AuctionInfoTypes';
 
@@ -26,6 +26,10 @@ function transformCurrencyEth(currency: CurrencyShortFragment) {
     updatedCurrency.decimals = 18;
   }
   return updatedCurrency;
+}
+
+export function transformAuctionsForKey(result: AuctionsResult, key: string) {
+  return result.filter((auction) => auction.curator.id === key);
 }
 
 export function transformMediaForKey(result: GetMediaAndAuctionsQuery, key: string) {

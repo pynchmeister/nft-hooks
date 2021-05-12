@@ -1,5 +1,32 @@
 import { gql } from 'graphql-request';
 
+export const GET_AUCTION_HOUSE_QUERY = gql`
+fragment CuratorReserveAuctionPartial on ReserveAuction {
+  id
+  tokenId
+  tokenContract
+  approved
+  duration
+  expectedEndTimestamp
+  createdAtTimestamp
+  createdAtBlockNumber
+  finalizedAtTimestamp
+  finalizedAtBlockNumber
+  curator {
+    id
+  }
+  tokenOwner {
+    id
+  }
+}
+
+query getReserveAuction($curators: [String!]) {
+  reserveAuctions(where: {curator_in: $curators}) {
+    ...CuratorReserveAuctionPartial
+  }
+}
+`;
+
 export const GET_MEDIA_QUERY = gql`
   fragment CurrencyShort on Currency {
     id
